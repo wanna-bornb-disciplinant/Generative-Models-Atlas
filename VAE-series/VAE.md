@@ -120,7 +120,7 @@ $$
 $$
 - 上述优化目标，一部分是要求潜变量经过解码器后能重建输入，一部分是要求潜空间服从某个指定的先验分布；这类似于一个重建项+先验正则项，截止目前，理论部分就全部搭建完毕，剩下的就是具体实现可训练的部分
 - VAE希望联合优化两部分参数，其实也就是联合优化Encoder和Decoder，这一关系可以参考原文的图1：
-![fig1](./images/vae/1.png)
+![fig1](https://github.com/wanna-bornb-disciplinant/Generative-Models-Atlas/blob/main/images/vae/1.png)
 
 ## 实现细节：
 - ELBO中的重建项依赖参数 $\phi$ 。我们不仅要优化生成模型参数，还要优化推断模型参数；因此一个很关键的问题是如何对 $\phi$ 进行求导计算梯度
