@@ -113,12 +113,9 @@ $$
 - 进一步简化训练目标，有：
 
 $$
-\mathcal L
-=
+\mathcal L =
 \mathbb E_{q_\phi(z\mid x)}
-[\log p_\theta(x\mid z)]
--
-D_{\mathrm{KL}}
+[\log p_\theta(x\mid z)] - D_{\mathrm{KL}}
 \left(q_\phi(z\mid x)\|p(z)\right)
 $$
 - 上述优化目标，一部分是要求潜变量经过解码器后能重建输入，一部分是要求潜空间服从某个指定的先验分布；这类似于一个重建项+先验正则项，截止目前，理论部分就全部搭建完毕，剩下的就是具体实现可训练的部分
@@ -126,13 +123,61 @@ $$
 ![fig1](./images/vae/1.png)
 
 ## 实现细节：
-- 
-  - 重参数化解决反向传播中需要采样z的问题
-  - 对于一个x采样几个z的问题，实际上一般都只会采样一次
-  - 最终输出的x的概率分布，但一般图简单好实现，最终就拿输出的均值作为最后的x输出
-  - 优化loss继续化简，将decoder输出的指定z下的方差全设置为1/2，这样对期望部分的loss计算进一步化简
+- ELBO中的重建项依赖参数 $\phi$ 。我们不仅要优化生成模型参数，还要优化推断模型参数；因此一个很关键的问题是如何对 $\phi$ 进行求导计算梯度
+- VAE最开始尝试用score function的思想解决采样无法梯度回传的问题，大致思路就是本身是对f(z)的z求导，但z是采样得到的，但z的分布又和Encoder的参数有关，梯度回传就断了，score function的解决方式是将求导转移到分布本身的log概率上：
 
-- VAE如果硬要从原理上总结一下，我认为是：**本身对x的建模跟变分和MAP都无关，变分和MAP都是体现在对z的后验概率建模的，z的后验概率是如何参与到x的概率分布建模的呢，是因为我们不想大量的去采样z，我们尽量去寻找和特定x关联性比较强的z**
+$$
+\begin{aligned}
+\nabla_\phi \mathbb{E}[f(z)]
+&= \nabla_\phi \int f(z) q_\phi(z) dz \\
+&= \int f(z)\cdot \nabla_\phi q_\phi(z) dz \\
+&= \int f(z)\cdot q_\phi(z)\cdot \frac{\nabla_\phi q_\phi(z)}{q_\phi(z)} dz \\
+&= \int f(z)\, q_\phi(z)\cdot \nabla_\phi \log q_\phi(z) dz \\
+&= \mathbb{E}_{q_\phi(z)}\Big[ f(z)\cdot \nabla_\phi \log q_\phi(z) \Big]
+\end{aligned}\)
+$$
+- 上述公式最大的问题在于方差不可控，两项相乘会放大随机波动，导致训练震荡很难收敛
+- 因此，VAE考虑**重参数化**解决这一关键问题，很多解读会将重参数化一笔带过，但其实这才是VAE的关键贡献
+- 重参数化的关键公式是：
+
+$$
+z=g_\phi(\epsilon,x),\quad \epsilon\sim p(\epsilon)
+$$
+- 其中辅助随机变量 $\epsilon$ 的分布不依赖于 $\phi$ ，而函数 $g_\phi$ 才包含学习函数，核心贡献是：将随机期望改写成关于参数可微的期望，从而能够用蒙特卡洛样本估计目标及其梯度
+- 进一步，VAE提出 **SGVB(Stochastic Gradient Variational Bayes)**，这是为了在ELBO的目标下方便计算梯度和随机估计的具体方法，VAE or AEVB是利用这些方法训练模型的算法框架
+- SGVB的第一种形式就是回归最简单的ELBO形式，利用蒙特卡洛和重参数化改写优化目标，即：
+
+$$
+\widetilde{\mathcal L}^{A}(\theta,\phi;x) =
+\frac{1}{L}
+\sum_{l=1}^{L}
+\left[
+\log p_\theta(x,z^{(l)}) -
+\log q_\phi(z^{(l)}\mid x)
+\right]
+$$
+- 进一步的，如果KL散度可以单独计算，可以将SGVB写成第二种形式：
+
+$$
+\widetilde{\mathcal L}^{B}(\theta,\phi;x) =
+-D_{\mathrm{KL}}
+\left(
+q_\phi(z\mid x)\|p(z)
+\right)+
+\frac{1}{L}
+\sum_{l=1}^{L}
+\log p_\theta(x\mid z^{(l)})
+$$
+- 上述的关键就是KL散度要方便计算，这就牵涉到VAE的实际设计，即z的先验分布定义
+- 作者选择标准多元高斯先验，这个选择有三个好处：采样容易；数学表达简单；当我们假定近似后验也是一个高斯分布时，上述KL散度可以解析计算，具体的解析计算结果就可以参照其他关于VAE的解读文章，这里不再展开(高斯分布之间KL散度的公式推导)
+- 到这里，VAE就彻底搭建完毕，但跳脱出数学推导，VAE的计算非常简单，**向Encoder输入x，Encoder输出预测后验分布的均值和方差，通过重参数化采样，计算得到采样的z，输入Decoder，希望他预测原始x，通过loss监督网络同时学习两部分的参数**
+- 实际训练过程中，单个样本只采样一次潜变量
+
+## 站在现在的角度，回看这篇文章
+- 最大化 ELBO，不等于最大化真实数据似然
+- 为什么近似后验一定要是对角高斯
+- **KL 正则项可能让潜变量失去作用**,当解码器足够强时，它可能仅凭自身参数就很好地拟合数据，而不需要使用z。此时，Encoder可能学成一个完全的标准高斯模型，这被称为**后验坍塌**
+- 标准 VAE 的图像经常显得模糊，这是一个开放问题，后续有很多工作尝试探讨和解决，这本身也和VAE的工程实现有关系
 
 ## 参考文章和博客，感谢他们的分析解读
 - [机器学习方法—优雅的模型（一）：变分自编码器（VAE）](https://zhuanlan.zhihu.com/p/348498294)
