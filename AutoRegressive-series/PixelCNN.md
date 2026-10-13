@@ -43,4 +43,4 @@ $$
 - [详解自回归模型 PixelCNN 大家族](https://zhuanlan.zhihu.com/p/632209862)
 - 关于RNN、LSTM和GRU的解读：
   - [Understanding LSTM Networks](https://colah.github.io/posts/2015-08-Understanding-LSTMs/)
-  - [Generative-Models-Atlas/RNN.md]()
+  - [Generative-Models-Atlas/RNN.md](https://github.com/wanna-bornb-disciplinant/Generative-Models-Atlas/blob/main/AutoRegressive-series/RNN.md)
