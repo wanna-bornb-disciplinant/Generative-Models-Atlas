@@ -37,8 +37,8 @@ $$
 - 作者提出 Diagonal BiLSTM，是为了同时解决两个问题：1. Row LSTM 无法覆盖全部可用历史像素。2. 逐像素递归的计算并行性不足。
 - Diagonal BiLSTM的核心思想是让隐藏状态沿图像对角线传播。对于一张二维图像，可以通过对各行施加不同的水平位移，将对角线排列转换为便于计算的列排列
 - 我们用原文中的两张图说明上述两种网络设计的含义：
-![1.png]()
-![2.png]()
+![1.png](https://github.com/wanna-bornb-disciplinant/Generative-Models-Atlas/blob/main/images/ar/1.png)
+![2.png](https://github.com/wanna-bornb-disciplinant/Generative-Models-Atlas/blob/main/images/ar/2.png)
 - PixelCNN 是这篇论文最具长期影响力的思想之一，可以参照[详解自回归模型 PixelCNN 大家族](https://zhuanlan.zhihu.com/p/632209862)，这篇文章有丰富的图例介绍PixelCNN的设计逻辑
 
 ## 实现细节
