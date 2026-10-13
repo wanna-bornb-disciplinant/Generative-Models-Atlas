@@ -19,8 +19,7 @@
 - PixelCNN的核心在于：
 
 $$
-p_\theta(\mathbf{x})
-=
+p_\theta(\mathbf{x})=
 \prod_i p_\theta(x_i\mid\mathbf{x}_{<i})
 $$
 - 例如在VAE中，很难解决的一个问题是如何定义高维的分布，因为归一化常数永远是一个绕不开的话题，但在PixelCNN这类自回归模型中，我只需要归一化单个像素的条件分布，联合分布自然也是归一化的，这意味着：
@@ -42,3 +41,6 @@ $$
 
 ## 参考文章和博客，感谢他们的分析解读
 - [详解自回归模型 PixelCNN 大家族](https://zhuanlan.zhihu.com/p/632209862)
+- 关于RNN、LSTM和GRU的解读：
+  - [Understanding LSTM Networks](https://colah.github.io/posts/2015-08-Understanding-LSTMs/)
+  - [Generative-Models-Atlas/RNN.md]()
