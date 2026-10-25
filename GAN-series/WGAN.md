@@ -1,226 +1,156 @@
-# GAN
+# WGAN和WGAN-GP
 
 ## 发表情况
-- Goodfellow, I. J., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair, S., ... & Bengio, Y. (2014). Generative adversarial nets. Advances in neural information processing systems, 27.
-  - NIPS 2014
-- 主要作者：Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, Yoshua Bengio
-- 截止2026.10 cite：99363+
-- 提出**对抗训练极小极大博弈框架**，催生了庞大的GAN变体谱系
-- NeurIPS 2024 Test of Time Award（时间检验奖）
-- [原文链接](https://proceedings.neurips.cc/paper_files/paper/2014/file/f033ed80deb0234979a61f95710dbe25-Paper.pdf)
+- Arjovsky, M., Chintala, S., & Bottou, L. (2017, July). Wasserstein generative adversarial networks. In International conference on machine learning (pp. 214-223). Pmlr.
+  - ICML 2017
+- 主要作者：Martin Arjovsky，Soumith Chintala，Leon Bottou
+  - FAIR工作
+- 截止2026.10 cite：23127+
+- 用 Wasserstein 距离替代 JS 散度，从理论上解释 GAN 梯度消失问题，奠定 “距离度量视角” 研究 GAN 的主线，重塑 GAN 损失函数设计思路
+- [原文链接](https://proceedings.mlr.press/v70/arjovsky17a/arjovsky17a.pdf)
+
+- Gulrajani, I., Ahmed, F., Arjovsky, M., Dumoulin, V., & Courville, A. (2017). Improved training of wasserstein gans. Advances in neural information processing systems, 30.
+  - NIPS 2017
+- 主要作者：Ishaan Gulrajani, Faruk Ahmed, Martin Arjovsky, Vincent Dumoulin, Aaron Courville
+- 截止2026.10 cite：16249+
+- 改进WGAN的Lipschitz约束
+- [原文链接](https://proceedings.neurips.cc/paper_files/paper/2017/file/892c3b1c6dccd52936e27cbd0ff683d6-Paper.pdf)
 
 ## 摘要解读：
-- GAN的摘要简明扼要地说明了文章和算法的内容
-  - 用两个网络共同学习真实数据分布
-  - 从概率建模转变为极小极大博弈
-  - 摘要给出了理论上的理想平衡点
+- 极简短的摘要内容，原始的GAN采用JS散度，这个理论上合理的目标，在实际神经网络训练时，不一定具有良好的优化性质
+- 因此，WGAN通过 Wasserstein-1 距离重新定义了生成模型的优化目标，并为这一目标提供了可实现的对抗训练方法
+- 文章用了一整个章节的篇幅论述了两种距离衡量方式的优劣，这是不同的写作方式
 
 ## 背景说明：
-- 在GAN之前，很多生成模型的核心问题是：如何构造并学习一个能够描述真实数据的概率分布？
-- 但GAN提出了另外一种思路：
-  - 我们不一定需要知道生成数据的显式概率密度，也不一定需要计算似然；只要能通过对抗过程，让模型生成的数据与真实数据在统计上无法区分，就有可能完成生成分布的学习
-- 上述思路被称为**隐式生成模型（Implicit Generative Model）**
+- 对于一张高维图像，数据可能集中在低维流形附近，而不是均匀分布于整个高维空间
 
-- GAN 的核心问题是：
-  - 判别器能够提供什么样的分布差异信息
-  - 这种信息能否变成生成器的有效梯度
-  - 两个网络交替优化最终能否达到平衡
+- 这个问题同样会发生在GAN类的生成网络中，生成数据只覆盖生成器映射所能到达的区域，在通常的光滑性与非退化条件下，该分布集中在至多 100 维的低维集合上，这就引出一个问题：
+  - 真实数据分布和生成数据分布可能分别集中在不同的低维集合上，它们的支撑集没有重叠，或者只有测度为零的交集
+  - 此时LS的优化目标可能会失效，JS 散度只能告诉我们两个分布是否重合，却不能在这个例子中体现它们距离重合还差多少
+  - Wasserstein 距离则能够连续地描述这种差异，原文的图1也描述了这种情况下的差异
+ 
+- 原文的Example1想说明即使两个低维数据流形几何上非常接近，在 JS 散度意义下也可能没有任何变化
+
 
 ## 具体分析：
-- 文章的introduction以概率建模和判别式模型入手，对于一个二分类模型，设标签为：
+- Wasserstein 距离最早并不是为深度学习而提出的，而是来自最优传输理论（Optimal Transport）。它也被称为 Earth Mover's Distance（EM Distance）
+
+- 考虑两个分布，最优传输理论希望解决的问题是：
 
 $$
-y=
-\begin{cases}
-1,& x\text{ 来自真实数据}\\
-0,& x\text{ 来自生成器}
-\end{cases}
+W_1(P_r,P_g)=
+\inf_{\gamma\in\Pi(P_r,P_g)}
+\mathbb E_{(x,y)\sim\gamma}
+[\|x-y\|]
 $$
-- 对于一个二分类模型，其伯努利似然为：
+- 其中 $\Pi(P_r,P_g)$ 表示边缘分布分别是 $P_r$ 和 $P_g$ 的所有联合分布。这里的 $\gamma(x,y)$ 可以理解为：选择将多少位于 $x$ 的质量与位于 $y$ 的质量配对；最佳运输尝试在所有合法的搬运方案中寻找总成本最低的方案
+
+- 为什么Wasserstein 距离对应更好的连续性，这需要对应原文的理论1和理论2部分
+- 理论1希望说明的是WGAN为生成器构造了一个在温和条件下连续且几乎处处可微的分布距离目标，主要推导的方式是通过最优传输成本、Lipschitz条件和三角不等式说明，当参数变化很小时，生成分布在 Wasserstein 意义下也只会发生有限且受控的变化
+- 理论2希望说明的是在紧致数据空间中KL散度趋近于0，可以推出JS散度趋近于0，可以推出W1距离趋近于0，作者认为更弱的收敛概念反而适合训练：一个分布在参数稍微改变后，更容易被 Wasserstein 距离判断为只发生了小变化
+
+- 但原始的W1距离在高维图像中几乎无法计算，文章通过Kantorovich–Rubinstein 对偶理论解决这个问题：
 
 $$
-p(y\mid x)=
-D(x)^y(1-D(x))^{1-y}
+W_1(P_r,P_g)=
+\sup_{\|f\|_L\le1}
+\left(
+\mathbb E_{x\sim P_r}[f(x)]-
+\mathbb E_{x\sim P_g}[f(x)]
+\right)
 $$
-- 上述似然去对数，结果为：
+- 对偶形式中，将优化传输计划改为了优化函数；将最小化总搬运成本改为最大化真实与生成数据的平均函数值之差；将需要考虑两个分布的联合配对改为只需分别采样两个分布；同时函数还可以通过网络近似
+
+- 原始 GAN 使用神经网络 $D$ 学习样本的真假分类，而WGAN 使用神经网络 $f_w$ 近似对偶函数（这是判别器的训练目标）：
 
 $$
-\log p(y\mid x)=
-y\log D(x)+(1-y)\log(1-D(x))
+\max_w
+\left[
+\mathbb E_{x\sim P_r}[f_w(x)]-
+\mathbb E_{z\sim P_z}[f_w(G_\theta(z))]
+\right]
 $$
-- 当真实样本与生成样本以相等权重参与训练时，最大化二分类对数似然（忽略共同常数因子）就得到：
+- 上述公式中强制要求判别器是1-Lipschitz，实现方式是后续工作的改进点
+
+- 从最优 Critic 到生成器梯度：
+- 先固定生成器参数 \(\theta\)，优化 Critic：
 
 $$
-\mathbb E_{p_{\mathrm{data}}}[\log D(x)]+
-\mathbb E_{p_g}[\log(1-D(x))]
+w^*(\theta)=\arg\max_w F(\theta,w)
 $$
-
-- 接下来需要解决的问题是：当判别器已经最优时，它究竟学到了什么？固定生成器 $G$，只优化判别器 $D$，将原始损失合并可以写成：
+- 计算生成器梯度时，将最优Critic视为固定函数，对生成器参数求偏导：
 
 $$
-V(D,G)=
-\int\left[p_{\mathrm{data}}(x)\log D(x)+
-p_g(x)\log(1-D(x))
-\right]dx
+\nabla_\theta W_1(P_r,P_\theta)=-
+\mathbb E_{z\sim P_z}
+\left[
+\nabla_\theta f^*(G_\theta(z))
+\right]
 $$
-
-- 定义：
-
-$$
-a=p_{\mathrm{data}}(x),\qquad b=p_g(x)
-$$
-- 于是问题变成：
+- 按照链式法则展开：
 
 $$
-\max_{0\leq d\leq 1}
-a\log d+b\log(1-d)
+\nabla_\theta W_1=-
+\mathbb E_z
+\left[
+J_{G_\theta}(z)^\top
+\nabla_x f^*(x)
+\big|_{x=G_\theta(z)}
+\right]
 $$
-
-- 令 $d$的相关导数为0，最终可得到：
-
-$$
-D_G^*(x)=
-\frac{p_{\mathrm{data}}(x)}
-{p_{\mathrm{data}}(x)+p_g(x)}
-$$
-- 上述结论最终说明：**最优判别器实际上估计的是真实分布与生成分布之间的密度比信息**，GAN 判别器的本质不是简单地判断真假，而是在学习两个概率分布之间的相对密度关系
-
-- 进一步我们分析生成器的优化目标，定义在最优判别器下的生成器目标：
-
-$$
-C(G)=\max_D V(D,G)=V(D_G^*,G)
-$$
-
-$$
-\begin{aligned}
-C(G)=&
-\int p_{\mathrm{data}}(x)
-\log\frac{p_{\mathrm{data}}(x)}
-{p_{\mathrm{data}}(x)+p_g(x)}dx\\
-&+
-\int p_g(x)
-\log\frac{p_g(x)}
-{p_{\mathrm{data}}(x)+p_g(x)}dx
-\end{aligned}
-$$
-- 构造一个混合分布：
-
-$$
-m(x)=
-\frac{p_{\mathrm{data}}(x)+p_g(x)}2
-$$
-- 将优化目标可写为：
-
-$$
-\begin{aligned}
-C(G)=&
-D_{\mathrm{KL}}(p_{\mathrm{data}}\|m)\\
-&+D_{\mathrm{KL}}(p_g\|m)-2\log2
-\end{aligned}
-$$
-- 上述优化目标和Jensen–Shannon 散度形式相同，这意味着达到优化目标的最小值的条件是生成概率和原始数据概率相同，**理想情况下，原始 minimax GAN 等价于最小化真实分布和生成分布之间的 JS 散度**
+- 与原始 GAN 相比，这里的关键优势是：最优 Critic 不需要退化成概率为 0 或 1 的分类结果；它可以继续对生成样本提供一个具有空间变化信息的函数值和梯度
 
 ## 实现细节：
-- 原论文第 3 页已经指出了一个很重要的实际问题：当生成器较差时，判别器很容易识别生成样本，这可能使原始生成器目标的梯度过弱
-- 为了解决这个问题，Goodfellow 在原论文中提出另一种生成器目标，不再最小化：
+- 从实现角度，WGAN的核心改变是：
+  - 将判别器变成 Critic，不再进行概率分类
+  - 去掉判别器最后的 Sigmoid
+  - 替换对抗损失函数
+  - 对 Critic 施加 Lipschitz 约束
+  - 在每次更新 Generator 之前，多次更新 Critic（5次）
+ 
+- 最开始版本的论文通过Weight Clipping（权重裁剪）实现Lipschitz 约束，即通过将参数限制在有界集合内，使网络具有统一的有限 Lipschitz 上界(-0.01和0.01)
 
-$$
-\log(1-D(G(z)))
-$$
-- 而是最大化：
-
-$$
-\log D(G(z))
-$$
-- Non-saturating Loss 解决的是一类梯度饱和问题，并不保证 GAN 不会出现梯度消失(BCEloss实现的时候是最小化负的Non-saturating Loss)
-
-- GAN 用可学习的判别器作为分布差异的间接优化机制，在训练中，我们并不计算显式概率，而是直接使用两个分布的样本训练一个二分类器
-
-- 训练过程需要交替优化： $D$ 需要不断适应当前生成器所产生的假数据；而 $G$ 需要不断利用当前判别器反馈的信息来改善生成分布；如果只持续更新生成器而不更新判别器，生成器可能学到的是如何利用固定判别器的漏洞，而非真正匹配数据分布；如果判别器过强，生成器又可能接收不到有用的训练信号
-
-- 整体的交替学习过程可以由原文的图1表示：
-![https://github.com/wanna-bornb-disciplinant/Generative-Models-Atlas/blob/main/images/gan/1.png](https://github.com/wanna-bornb-disciplinant/Generative-Models-Atlas/blob/main/images/gan/1.png)
-
-- 整体上，可以用一个简单的pytorch代码展示GAN是如何训练的：
-```python
-import torch
-import torch.nn as nn
-
-latent_dim = 100
-image_dim = 28 * 28
-
-G = nn.Sequential(
-    nn.Linear(latent_dim, 256),
-    nn.ReLU(),
-    nn.Linear(256, 512),
-    nn.ReLU(),
-    nn.Linear(512, image_dim),
-    nn.Sigmoid()
-)
-
-D = nn.Sequential(
-    nn.Linear(image_dim, 512),
-    nn.LeakyReLU(0.2),
-    nn.Linear(512, 256),
-    nn.LeakyReLU(0.2),
-    nn.Linear(256, 1)
-)
-
-criterion = nn.BCEWithLogitsLoss()
-opt_G = torch.optim.Adam(G.parameters(), lr=2e-4)
-opt_D = torch.optim.Adam(D.parameters(), lr=2e-4)
-
-def train_step(real):
-    real = real.reshape(real.size(0), -1)
-    batch_size = real.size(0)
-    device = real.device
-    G.to(device)
-    D.to(device)
-
-    real_labels = torch.ones(batch_size, 1, device=device)
-    fake_labels = torch.zeros(batch_size, 1, device=device)
-
-    # 1. Train discriminator
-    z = torch.randn(batch_size, latent_dim, device=device)
-    fake = G(z).detach()
-
-    d_real = D(real)
-    d_fake = D(fake)
-
-    loss_D = (
-        criterion(d_real, real_labels)
-        + criterion(d_fake, fake_labels)
-    )
-
-    opt_D.zero_grad()
-    loss_D.backward()
-    opt_D.step()
-
-    # 2. Train generator (non-saturating)
-    z = torch.randn(batch_size, latent_dim, device=device)
-    fake = G(z)
-
-    loss_G = criterion(D(fake), real_labels)
-
-    opt_G.zero_grad()
-    loss_G.backward()
-    opt_G.step()
-
-    return loss_D.item(), loss_G.item()
-```
-
-- 作者在三个数据集上进行了实验：MNIST：手写数字；TFD：Toronto Face Database；CIFAR-10：自然图像
+- 实验部分：
+  - 实验一：八个高斯混合分布，这种分布特别适合观察 Mode Collapse(图2)
+  - 实验二：最优判别器与 Critic 梯度 Figure 3
+  - 实验三：Loss 能否反映生成质量 Figure 4、5
+  - 实验四：不同网络架构下的稳定性
 
 ## 站在现在的角度，回看这篇文章
-- JS散度本身具有局限性：JS 散度可以判断两个分布是否一致，但当两个分布的支撑集不重叠时，它可能无法提供关于如何移动生成分布的有效距离信息
-  - 对于确定性且足够光滑的生成器，它所诱导的分布可能集中在低维流形上；真实数据和生成数据各自所在的流形在训练初期可能不重叠；在这种情况下，基于最优判别器的 JS 散度目标可能饱和
+- 原始 WGAN 用参数裁剪实现 Lipschitz 约束，虽然方法简单，但存在比较明显的问题
 
-- 原文提到过这一问题：因为 GAN 的每一步训练并不是直接对 $p_g$ 做全局分布优化，而是利用有限样本上的判别器梯度改变模式，这会导致生成器可能发现某些输出特别容易欺骗当前判别器，于是越来越多不同的潜变量被映射到这些输出附近，这就是典型的模式崩塌（Mode Collapse）
-- 崩塌并不是由 JS 散度饱和单独导致的：它还与非凸非凹博弈、有限容量判别器、训练动力学等因素有关
+- WGAN-GP 的基本思想是：既然我们希望 Critic 满足 1-Lipschitz 条件，那么是否能够直接约束其输入梯度？
 
-- 简单的同步梯度下降—上升仍然可能出现向外螺旋发散，而不是收敛，这是GAN训练困难的一个很大障碍，交替优化是必然选择，但也是次优选择，至少从训练的层面来说是这样
+- WGAN-GP 提出了如下损失：
+
+$$
+\begin{aligned}
+\mathcal L_C^{GP}
+={}&
+\mathbb E_{x\sim P_g}[f_w(x)]-
+\mathbb E_{x\sim P_r}[f_w(x)]\\
+&+
+\lambda
+\mathbb E_{\hat x\sim P_{\hat x}}
+\left[
+\left(
+\|\nabla_{\hat x}f_w(\hat x)\|_2-1
+\right)^2
+\right]
+\end{aligned}
+$$
+- 其中插值样本：
+
+$$
+\hat x=
+\epsilon x_r+(1-\epsilon)x_g
+$$
+
+$$
+\epsilon\sim U[0,1]
+$$
+- WGAN-GP 并不是严格施加全局 1-Lipschitz 约束：首先，原始的 1-Lipschitz 条件要求梯度范数不超过 1，而 WGAN-GP 惩罚其偏离 1；其次，它只在采样得到的插值点上施加软约束
 
 ## 参考文章和博客，感谢他们的分析解读
 
-- [GAN论文逐段精读【论文精读】-李沐-Bilibili](https://www.bilibili.com/video/BV1rb4y187vD)
 
