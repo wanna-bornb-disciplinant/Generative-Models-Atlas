@@ -1,4 +1,4 @@
-# GAN
+# CycleGAN
 
 ## 发表情况
 - Zhu, J. Y., Park, T., Isola, P., & Efros, A. A. (2017, October). Unpaired image-to-image translation using cycle-consistent adversarial networks. In 2017 IEEE international conference on computer vision (ICCV) (pp. 2242-2251). Ieee.
