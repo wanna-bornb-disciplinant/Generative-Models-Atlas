@@ -1,226 +1,147 @@
-# GAN
+# BigGAN
 
 ## 发表情况
-- Goodfellow, I. J., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair, S., ... & Bengio, Y. (2014). Generative adversarial nets. Advances in neural information processing systems, 27.
-  - NIPS 2014
-- 主要作者：Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, Yoshua Bengio
-- 截止2026.10 cite：99363+
-- 提出**对抗训练极小极大博弈框架**，催生了庞大的GAN变体谱系
-- NeurIPS 2024 Test of Time Award（时间检验奖）
-- [原文链接](https://proceedings.neurips.cc/paper_files/paper/2014/file/f033ed80deb0234979a61f95710dbe25-Paper.pdf)
+- Brock, A., Donahue, J., & Simonyan, K. (2018). Large scale GAN training for high fidelity natural image synthesis. arXiv preprint arXiv:1809.11096.
+  - ICLR 2019
+- 主要作者：Andrew Brock，Jeff Donahue，Karen Simonyan
+  - Google Deepmind
+- 截止2026.10 cite：8487+
+- 证明大 batch、强正则、类别条件下 GAN 可以生成极高分辨率高质量图像，验证 GAN 缩放法则，为后来大规模生成模型提供缩放经验
+- [原文链接](https://arxiv.org/pdf/1809.11096)
 
 ## 摘要解读：
-- GAN的摘要简明扼要地说明了文章和算法的内容
-  - 用两个网络共同学习真实数据分布
-  - 从概率建模转变为极小极大博弈
-  - 摘要给出了理论上的理想平衡点
+- 摘要说明的是BigGAN希望解决在大规模数据集上的生成问题，BigGAN 主要研究如何把 GAN 扩展到大规模、多类别、复杂自然图像生成任务
+
+- BigGAN 证明了 GAN 能够通过大规模训练显著提升复杂自然图像的生成质量，同时揭示了模型规模、训练稳定性以及生成保真度与多样性之间的关键关系
+
+- 因此BigGAN很大程度上是一个工程性的实践任务，在 ImageNet 128×128 类别条件生成任务上 FID 为7.4，在当时的这个任务上获得了极大的提升
 
 ## 背景说明：
-- 在GAN之前，很多生成模型的核心问题是：如何构造并学习一个能够描述真实数据的概率分布？
-- 但GAN提出了另外一种思路：
-  - 我们不一定需要知道生成数据的显式概率密度，也不一定需要计算似然；只要能通过对抗过程，让模型生成的数据与真实数据在统计上无法区分，就有可能完成生成分布的学习
-- 上述思路被称为**隐式生成模型（Implicit Generative Model）**
-
-- GAN 的核心问题是：
-  - 判别器能够提供什么样的分布差异信息
-  - 这种信息能否变成生成器的有效梯度
-  - 两个网络交替优化最终能否达到平衡
+- 在BigGAN发表之前，相关基础技术实际上已经相当成熟：
+  - ResNet 提供深层残差生成与判别结构
+  - Spectral Normalization 改善对抗训练条件 （SN-GAN 2018）
+  - Self-Attention 增强全局依赖关系的建模能力 （SA-GAN 2018）
+  - Conditional BatchNorm 让类别信息进入生成器 （Projection cGAN）
+  - Projection Discriminator 让判别器利用类别信息
+ 
+- BigGAN 与 StyleGAN 的研究目标不同：StyleGAN 主要针对 FFHQ 等相对单一但内部变化丰富的数据分布，例如人脸；BigGAN 主要针对 ImageNet 这样包含大量语义类别的数据分布
+  - 对 BigGAN 来说，已知类别标签可以减少生成任务中的一部分语义不确定性
+  - 但 ImageNet 包含大量不同类别，因此 BigGAN 同时需要：建模复杂的跨类别分布；保持类别语义一致性；保留同一类别内部的样本多样性；支撑高分辨率图像生成
 
 ## 具体分析：
-- 文章的introduction以概率建模和判别式模型入手，对于一个二分类模型，设标签为：
+- 原文的Section3探讨了一个问题：为什么增大 Batch Size 能提高生成质量
+  - BigGAN给出了一个理论解释：考虑一个数据集由多个模式组成，在较小 Batch Size 的条件下，单个 minibatch 可能仅覆盖有限的数据模式，使得判别器接收到的分布信息不充分；随着 Batch Size 增大，单个批次可能覆盖更多模式，使判别器获得更具代表性的训练样本，也可能改善生成器的梯度信息
+  - 原文的table1也给出了不同batch size的性能对比
+  - 在这个基础上，文章还探讨了扩大模型容量的影响
+    - 模型规模扩大后，性能虽然显著提高，训练却更容易突然崩溃
+  - 在上述结论的基础上，BigGAN 的核心问题逐渐从“能否生成高质量图像”，转向“如何让大规模 GAN 可靠地生成高质量图像”
+ 
+- 首先，BigGAN是一个类别条件生成模型，所以需要关注类别条件如何注入生成器
+- BigGAN 采用 Conditional Batch Normalization（CBN），使类别信息直接影响各个残差块的特征分布
+- 这与 StyleGAN 后来广为人知的风格调制思想存在一定相似性，但二者并不相同：
+  - BigGAN 的 CBN 主要服务于类别条件生成
+  - StyleGAN 的 AdaIN 通过映射网络产生的潜变量控制各层风格
+  - StyleGAN2 又将调制机制发展为权重调制与解调
+- BigGAN 的改进是使用 Shared Embedding 减少重复的类别嵌入参数
+  - 具体的做法就是利用类别标签y生成贡献类别的嵌入，然后在不同的残差块中使用独立的线性投影，目的是减少嵌入参数、使多层信息共享同一类别表示
+ 
+- 传统生成器中潜变量 $z$ 仅在最初输入，后续所有变化都通过逐层特征变换传播
+- BigGAN 的作者认为，潜变量应该能够直接影响不同分辨率和不同层级的特征，因此提出 Hierarchical Latent Space，也就是论文中的 skip-z
+- 首先将潜变量拆分：
 
 $$
-y=
-\begin{cases}
-1,& x\text{ 来自真实数据}\\
-0,& x\text{ 来自生成器}
-\end{cases}
+z=[z_0,z_1,\ldots,z_L]
 $$
-- 对于一个二分类模型，其伯努利似然为：
+- 然后让不同的潜变量块进入对应残差模块：
 
 $$
-p(y\mid x)=
-D(x)^y(1-D(x))^{1-y}
-$$
-- 上述似然去对数，结果为：
-
-$$
-\log p(y\mid x)=
-y\log D(x)+(1-y)\log(1-D(x))
-$$
-- 当真实样本与生成样本以相等权重参与训练时，最大化二分类对数似然（忽略共同常数因子）就得到：
-
-$$
-\mathbb E_{p_{\mathrm{data}}}[\log D(x)]+
-\mathbb E_{p_g}[\log(1-D(x))]
-$$
-
-- 接下来需要解决的问题是：当判别器已经最优时，它究竟学到了什么？固定生成器 $G$，只优化判别器 $D$，将原始损失合并可以写成：
-
-$$
-V(D,G)=
-\int\left[p_{\mathrm{data}}(x)\log D(x)+
-p_g(x)\log(1-D(x))
-\right]dx
-$$
-
-- 定义：
-
-$$
-a=p_{\mathrm{data}}(x),\qquad b=p_g(x)
-$$
-- 于是问题变成：
-
-$$
-\max_{0\leq d\leq 1}
-a\log d+b\log(1-d)
-$$
-
-- 令 $d$的相关导数为0，最终可得到：
-
-$$
-D_G^*(x)=
-\frac{p_{\mathrm{data}}(x)}
-{p_{\mathrm{data}}(x)+p_g(x)}
-$$
-- 上述结论最终说明：**最优判别器实际上估计的是真实分布与生成分布之间的密度比信息**，GAN 判别器的本质不是简单地判断真假，而是在学习两个概率分布之间的相对密度关系
-
-- 进一步我们分析生成器的优化目标，定义在最优判别器下的生成器目标：
-
-$$
-C(G)=\max_D V(D,G)=V(D_G^*,G)
+c_l=[e_y,z_l]
 $$
 
 $$
-\begin{aligned}
-C(G)=&
-\int p_{\mathrm{data}}(x)
-\log\frac{p_{\mathrm{data}}(x)}
-{p_{\mathrm{data}}(x)+p_g(x)}dx\\
-&+
-\int p_g(x)
-\log\frac{p_g(x)}
-{p_{\mathrm{data}}(x)+p_g(x)}dx
-\end{aligned}
+(\gamma_l,\beta_l)=f_l(c_l)
 $$
-- 构造一个混合分布：
+- 其实这个设计在后续的实验效果并不是很明显
+
+- 生成器知道需要生成什么类别，但判别器同样需要判断生成图像是否符合指定类别
+- BigGAN 继承了 Projection Discriminator，其形式可以表示为：
 
 $$
-m(x)=
-\frac{p_{\mathrm{data}}(x)+p_g(x)}2
+D(x,y)=u^\top h(x)+h(x)^\top e_y
 $$
-- 将优化目标可写为：
+-其中：
+  - $h(x)$：判别器提取的图像特征
+  - $u^\top h(x)$：类别无关的真假评分
+  - $h(x)^\top e_y$：图像特征与类别嵌入的匹配程度
+
+- BigGAN 没有提出全新的对抗损失，而是继承了 SA-GAN 使用的 Hinge Loss
+- BigGAN 还在生成器与判别器中使用谱归一化
+
+- 如果硬说BigGAN的最大贡献，应该是**Truncation Trick**，这也是摘要部分就提到的内容
+- **训练完成后，不改变生成器参数，仅仅改变潜变量的采样分布，就可以控制生成图像的质量和多样性**
+- 生成器通过映射学习将潜变量分布变换为数据分布，训练完成后，我们通常继续从相同的标准正态分布采样
+- 但实际上，对于 GAN 来说，推理阶段并不强制要求使用与训练阶段完全相同的采样分布；BigGAN因此提出：能否在采样时更偏向潜变量分布中的高密度区域
+- BigGAN的实际采样分布为：
 
 $$
-\begin{aligned}
-C(G)=&
-D_{\mathrm{KL}}(p_{\mathrm{data}}\|m)\\
-&+D_{\mathrm{KL}}(p_g\|m)-2\log2
-\end{aligned}
+p_\tau(z_i) =
+\frac{\phi(z_i)}
+{\Phi(\tau)-\Phi(-\tau)}
+\mathbf 1_{\{|z_i|\leq\tau\}}
 $$
-- 上述优化目标和Jensen–Shannon 散度形式相同，这意味着达到优化目标的最小值的条件是生成概率和原始数据概率相同，**理想情况下，原始 minimax GAN 等价于最小化真实分布和生成分布之间的 JS 散度**
+- 随着 $\tau$ 减小，潜变量取值范围缩小，方差也随之降低，即越界重采样
+- 限制潜变量取值，就可能降低生成结果中的极端变化
+- BigGAN 的 Truncation Trick 本质上是一个经验有效的采样策略，而不是对生成质量单调性的理论保证
+- 截断提高保真度，却也损失了多样性
+- BigGAN 的一个有趣发现是：并不是所有训练好的生成器都能很好地使用 Truncation Trick
+
+- 作者因此希望改善生成器的条件性质，使其面对不同范围的潜变量输入时，输出变化更加平稳
+- 传统正交正则化：
+
+$$
+\mathcal R_{\mathrm{orth}}(W)=
+\beta\|W^\top W-I\|_F^2
+$$
+- 这鼓励权重矩阵的列向量正交且具有单位范数，但这种约束较强
+- BigGAN 因此提出一个放松版本，去掉对角项：
+
+$$
+\mathcal R_{\mathrm{BigGAN}}(W)=
+\beta
+\left\|
+(W^\top W)\odot(\mathbf 1-I)
+\right\|_F^2
+$$
+- 它的实际作用是减少不同权重列向量之间的内积，而不强制每个向量都具有单位范数，比起谱归一化，这是loss上的软约束
+
+- 与很多只展示最终生成质量的工作不同，BigGAN 专门研究了大规模训练中的异常现象
+- 在小规模设置下稳定训练的 GAN，当模型容量和 Batch Size 增加之后，可能出现突发性的训练崩溃
+- 作者通过监控参数矩阵的前三个奇异值
+  - 生成器多数层的谱范数较为平稳，但少数层（尤其初始全连接层）的最大奇异值会持续增大，并在训练崩溃时突然增长
+  - 与生成器相比，判别器的奇异值变化表现出更明显的波动
+  - 作者还测试了针对判别器的 R1 正则化，结论是如果判别器受到过强约束，虽然训练过程不容易崩溃，但它提供给生成器的学习信号也可能变得不足
+- 最终BigGAN的结论是：生成器稳定与判别器稳定，并不能直接推出整个对抗训练过程稳定
+- 因此，论文最终没有提出完整的 GAN 收敛解决方案，而是采用了一种务实的选择：允许训练在后期发生崩溃，但保存此前性能最好的模型检查点
 
 ## 实现细节：
-- 原论文第 3 页已经指出了一个很重要的实际问题：当生成器较差时，判别器很容易识别生成样本，这可能使原始生成器目标的梯度过弱
-- 为了解决这个问题，Goodfellow 在原论文中提出另一种生成器目标，不再最小化：
+- BigGAN 的生成器主要由 ResNet 残差块构成，并继承 SA-GAN 的 Self-Attention 模块
 
-$$
-\log(1-D(G(z)))
-$$
-- 而是最大化：
+- ImageNet 上的完整性能对比说明了：BigGAN 相比之前的 SA-GAN，已经通过大规模训练和架构改进取得显著提升
 
-$$
-\log D(G(z))
-$$
-- Non-saturating Loss 解决的是一类梯度饱和问题，并不保证 GAN 不会出现梯度消失(BCEloss实现的时候是最小化负的Non-saturating Loss)
+- BigGAN-deep 对残差块结构进行了重新设计，通过Bottleneck ResBlock在增加层数的情况下不同比例增加计算开销和参数数量
 
-- GAN 用可学习的判别器作为分布差异的间接优化机制，在训练中，我们并不计算显式概率，而是直接使用两个分布的样本训练一个二分类器
-
-- 训练过程需要交替优化： $D$ 需要不断适应当前生成器所产生的假数据；而 $G$ 需要不断利用当前判别器反馈的信息来改善生成分布；如果只持续更新生成器而不更新判别器，生成器可能学到的是如何利用固定判别器的漏洞，而非真正匹配数据分布；如果判别器过强，生成器又可能接收不到有用的训练信号
-
-- 整体的交替学习过程可以由原文的图1表示：
-![https://github.com/wanna-bornb-disciplinant/Generative-Models-Atlas/blob/main/images/gan/1.png](https://github.com/wanna-bornb-disciplinant/Generative-Models-Atlas/blob/main/images/gan/1.png)
-
-- 整体上，可以用一个简单的pytorch代码展示GAN是如何训练的：
-```python
-import torch
-import torch.nn as nn
-
-latent_dim = 100
-image_dim = 28 * 28
-
-G = nn.Sequential(
-    nn.Linear(latent_dim, 256),
-    nn.ReLU(),
-    nn.Linear(256, 512),
-    nn.ReLU(),
-    nn.Linear(512, image_dim),
-    nn.Sigmoid()
-)
-
-D = nn.Sequential(
-    nn.Linear(image_dim, 512),
-    nn.LeakyReLU(0.2),
-    nn.Linear(512, 256),
-    nn.LeakyReLU(0.2),
-    nn.Linear(256, 1)
-)
-
-criterion = nn.BCEWithLogitsLoss()
-opt_G = torch.optim.Adam(G.parameters(), lr=2e-4)
-opt_D = torch.optim.Adam(D.parameters(), lr=2e-4)
-
-def train_step(real):
-    real = real.reshape(real.size(0), -1)
-    batch_size = real.size(0)
-    device = real.device
-    G.to(device)
-    D.to(device)
-
-    real_labels = torch.ones(batch_size, 1, device=device)
-    fake_labels = torch.zeros(batch_size, 1, device=device)
-
-    # 1. Train discriminator
-    z = torch.randn(batch_size, latent_dim, device=device)
-    fake = G(z).detach()
-
-    d_real = D(real)
-    d_fake = D(fake)
-
-    loss_D = (
-        criterion(d_real, real_labels)
-        + criterion(d_fake, fake_labels)
-    )
-
-    opt_D.zero_grad()
-    loss_D.backward()
-    opt_D.step()
-
-    # 2. Train generator (non-saturating)
-    z = torch.randn(batch_size, latent_dim, device=device)
-    fake = G(z)
-
-    loss_G = criterion(D(fake), real_labels)
-
-    opt_G.zero_grad()
-    loss_G.backward()
-    opt_G.step()
-
-    return loss_D.item(), loss_G.item()
-```
-
-- 作者在三个数据集上进行了实验：MNIST：手写数字；TFD：Toronto Face Database；CIFAR-10：自然图像
+- 论文不只在 ImageNet 上进行了实验，还使用了更大规模的 JFT-300M 数据
+  - 在这一数据集上，模型容量进一步增大后，生成性能继续提升；且论文发现 JFT-300M 上的训练稳定性反而可能优于 ImageNet
+  - 这意味着：增加训练数据的数量和覆盖范围，可能有助于改善对抗训练中的某些不稳定现象，原因在于两个网络并不是独立优化的
 
 ## 站在现在的角度，回看这篇文章
-- JS散度本身具有局限性：JS 散度可以判断两个分布是否一致，但当两个分布的支撑集不重叠时，它可能无法提供关于如何移动生成分布的有效距离信息
-  - 对于确定性且足够光滑的生成器，它所诱导的分布可能集中在低维流形上；真实数据和生成数据各自所在的流形在训练初期可能不重叠；在这种情况下，基于最优判别器的 JS 散度目标可能饱和
+- BigGAN 代表了 GAN 的 Scaling 路线
 
-- 原文提到过这一问题：因为 GAN 的每一步训练并不是直接对 $p_g$ 做全局分布优化，而是利用有限样本上的判别器梯度改变模式，这会导致生成器可能发现某些输出特别容易欺骗当前判别器，于是越来越多不同的潜变量被映射到这些输出附近，这就是典型的模式崩塌（Mode Collapse）
-- 崩塌并不是由 JS 散度饱和单独导致的：它还与非凸非凹博弈、有限容量判别器、训练动力学等因素有关
+- BigGAN 表明：生成模型训练结束后，我们仍然能够通过改变采样策略来控制输出分布的性质
 
-- 简单的同步梯度下降—上升仍然可能出现向外螺旋发散，而不是收敛，这是GAN训练困难的一个很大障碍，交替优化是必然选择，但也是次优选择，至少从训练的层面来说是这样
+- BigGAN的缺陷在于：
+  - 训练稳定性仍然没有根本解决
+  - 潜在空间缺乏明确的语义解耦保证
 
 ## 参考文章和博客，感谢他们的分析解读
-
-- [GAN论文逐段精读【论文精读】-李沐-Bilibili](https://www.bilibili.com/video/BV1rb4y187vD)
 
