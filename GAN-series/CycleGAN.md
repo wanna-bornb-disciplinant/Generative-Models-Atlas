@@ -1,226 +1,141 @@
 # GAN
 
 ## 发表情况
-- Goodfellow, I. J., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair, S., ... & Bengio, Y. (2014). Generative adversarial nets. Advances in neural information processing systems, 27.
-  - NIPS 2014
-- 主要作者：Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, Yoshua Bengio
-- 截止2026.10 cite：99363+
-- 提出**对抗训练极小极大博弈框架**，催生了庞大的GAN变体谱系
-- NeurIPS 2024 Test of Time Award（时间检验奖）
-- [原文链接](https://proceedings.neurips.cc/paper_files/paper/2014/file/f033ed80deb0234979a61f95710dbe25-Paper.pdf)
+- Zhu, J. Y., Park, T., Isola, P., & Efros, A. A. (2017, October). Unpaired image-to-image translation using cycle-consistent adversarial networks. In 2017 IEEE international conference on computer vision (ICCV) (pp. 2242-2251). Ieee.
+  - ICCV 2017
+- 主要作者：Jun-Yan Zhu，Taesung Park，Phillip Isola，Alexei A. Efros
+- 截止2026.10 cite：34278+
+- 无配对图像翻译开山之作，循环一致性损失成为无监督跨域转换的经典思路，影响力溢出 GAN 领域，广泛用于医学、遥感等跨域任务
+- [原文链接](https://www.researchgate.net/profile/Jun-Yan-Zhu-2/publication/315710637_Unpaired_Image-to-Image_Translation_using_Cycle-Consistent_Adversarial_Networks/links/5c18207a299bf139c7606041/Unpaired-Image-to-Image-Translation-using-Cycle-Consistent-Adversarial-Networks.pdf?__cf_chl_tk=Pme5weEVwTz8hxYrw8TlQQJUK.M24Fi.ed49PTkZv9w-1793088568-1.0.1.1-vNVhtaCEferKK8wsaRH0kzXlkodIsBZMfNYqhs49UPk)
 
 ## 摘要解读：
-- GAN的摘要简明扼要地说明了文章和算法的内容
-  - 用两个网络共同学习真实数据分布
-  - 从概率建模转变为极小极大博弈
-  - 摘要给出了理论上的理想平衡点
+- CycleGAN希望解决的问题是Image-to-Image Translation（图像到图像转换）
+
+- 在 CycleGAN 之前，pix2pix(也是junyan zhu的工作) 已经能够利用条件 GAN 实现图像转换，但CycleGAN 的研究目标，就是利用这两个彼此独立的数据集合，学习具有意义的映射 $G:X\to Y$
 
 ## 背景说明：
-- 在GAN之前，很多生成模型的核心问题是：如何构造并学习一个能够描述真实数据的概率分布？
-- 但GAN提出了另外一种思路：
-  - 我们不一定需要知道生成数据的显式概率密度，也不一定需要计算似然；只要能通过对抗过程，让模型生成的数据与真实数据在统计上无法区分，就有可能完成生成分布的学习
-- 上述思路被称为**隐式生成模型（Implicit Generative Model）**
+- 原始GAN的优化目标只约束输出分布，不约束输入输出之间的关系
+- 将GAN最开始输入的随机噪声z替换为源域图像x之后，原始GAN的优化目标是：
 
-- GAN 的核心问题是：
-  - 判别器能够提供什么样的分布差异信息
-  - 这种信息能否变成生成器的有效梯度
-  - 两个网络交替优化最终能否达到平衡
+$$
+\min_G\max_D V(D,G)=
+\mathbb E_{y\sim p_Y}[\log D(y)]+
+\mathbb E_{x\sim p_X}
+[\log(1-D(G(x)))]
+$$
+- 但在上述优化目标中，对抗训练得到的映射并不一定符合语义
+  - 一个网络即使能够输出与真实斑马分布非常接近的图像，也不能保证：输入一匹站立的马，输出站立的斑马；输入一匹奔跑的马，输出奔跑的斑马；输入图像中的背景、姿势和空间结构能够保留
+  - 因为判别器只关心生成的图像是否属于目标域，而不一定关心它是否忠实于输入图像
+
+- 这引出了图像转换中的一个关键问题：分布匹配（Distribution Matching）与语义对应（Semantic Correspondence）是两回事
+
+- CycleGAN通过Cycle Consistency 改善这个问题
+  - CycleGAN 引入另一个映射：
+
+$$
+F:Y\rightarrow X
+$$
+
+- 具体来说，对于某张输入图像 $x$，先执行前向转换，再执行反向转换，要求最后转换的结果与输入相似
+- 这个要求意味着，前向转换 $G$ 不能随意丢弃大量输入信息，否则反向映射 $F$ 就难以重建原始图像
+- 因此，循环一致性可以在一定程度上抑制多对一塌缩；但同时，循环一致性只能约束映射的可恢复性，并不能保证映射具有正确的语义
 
 ## 具体分析：
-- 文章的introduction以概率建模和判别式模型入手，对于一个二分类模型，设标签为：
+- 具体分析可以参照原文的第三部分
 
-$$
-y=
-\begin{cases}
-1,& x\text{ 来自真实数据}\\
-0,& x\text{ 来自生成器}
-\end{cases}
-$$
-- 对于一个二分类模型，其伯努利似然为：
+- CycleGAN 的模型包含四个独立网络：
+- 生成器 $G:X\to Y$
+- 生成器 $F:Y\to X$
+- 判别器 $D_Y$：判断图像是否属于真实目标域 $Y$
+- 判别器 $D_X$：判断图像是否属于真实源域 $X$
 
-$$
-p(y\mid x)=
-D(x)^y(1-D(x))^{1-y}
-$$
-- 上述似然去对数，结果为：
-
-$$
-\log p(y\mid x)=
-y\log D(x)+(1-y)\log(1-D(x))
-$$
-- 当真实样本与生成样本以相等权重参与训练时，最大化二分类对数似然（忽略共同常数因子）就得到：
-
-$$
-\mathbb E_{p_{\mathrm{data}}}[\log D(x)]+
-\mathbb E_{p_g}[\log(1-D(x))]
-$$
-
-- 接下来需要解决的问题是：当判别器已经最优时，它究竟学到了什么？固定生成器 $G$，只优化判别器 $D$，将原始损失合并可以写成：
-
-$$
-V(D,G)=
-\int\left[p_{\mathrm{data}}(x)\log D(x)+
-p_g(x)\log(1-D(x))
-\right]dx
-$$
-
-- 定义：
-
-$$
-a=p_{\mathrm{data}}(x),\qquad b=p_g(x)
-$$
-- 于是问题变成：
-
-$$
-\max_{0\leq d\leq 1}
-a\log d+b\log(1-d)
-$$
-
-- 令 $d$的相关导数为0，最终可得到：
-
-$$
-D_G^*(x)=
-\frac{p_{\mathrm{data}}(x)}
-{p_{\mathrm{data}}(x)+p_g(x)}
-$$
-- 上述结论最终说明：**最优判别器实际上估计的是真实分布与生成分布之间的密度比信息**，GAN 判别器的本质不是简单地判断真假，而是在学习两个概率分布之间的相对密度关系
-
-- 进一步我们分析生成器的优化目标，定义在最优判别器下的生成器目标：
-
-$$
-C(G)=\max_D V(D,G)=V(D_G^*,G)
-$$
+- 具体的训练方式可以参照原文的图3
+![https://github.com/wanna-bornb-disciplinant/Generative-Models-Atlas/blob/main/images/gan/4.png](https://github.com/wanna-bornb-disciplinant/Generative-Models-Atlas/blob/main/images/gan/4.png)
+- 上述图中的优化目标可以分为三部分：
+  - 第一部分：Adversarial Loss
+    - 对前向映射： $G:X\rightarrow Y$，使用判别器 $D_Y$，对抗损失为（反向映射也是类似的，反向映射不再展开）：
 
 $$
 \begin{aligned}
-C(G)=&
-\int p_{\mathrm{data}}(x)
-\log\frac{p_{\mathrm{data}}(x)}
-{p_{\mathrm{data}}(x)+p_g(x)}dx\\
+\mathcal L_{\mathrm{GAN}}(G,D_Y)
+={}&
+\mathbb E_{y\sim p_Y}
+[\log D_Y(y)]\\
 &+
-\int p_g(x)
-\log\frac{p_g(x)}
-{p_{\mathrm{data}}(x)+p_g(x)}dx
+\mathbb E_{x\sim p_X}
+[\log(1-D_Y(G(x)))]
 \end{aligned}
 $$
-- 构造一个混合分布：
-
-$$
-m(x)=
-\frac{p_{\mathrm{data}}(x)+p_g(x)}2
-$$
-- 将优化目标可写为：
+  - 上述的第一部分loss实际上完成的就是数据分布匹配
+  - 第二部分：Cycle Consistency Loss
+    - CycleGAN 最核心的设计是（和前面的对抗损失一样，也是分为前向和反向两部分）：
 
 $$
 \begin{aligned}
-C(G)=&
-D_{\mathrm{KL}}(p_{\mathrm{data}}\|m)\\
-&+D_{\mathrm{KL}}(p_g\|m)-2\log2
+\mathcal L_{\mathrm{cyc}}(G,F)
+={}&
+\mathbb E_{x\sim p_X}
+\left[\|F(G(x))-x\|_1\right]\\
+&+
+\mathbb E_{y\sim p_Y}
+\left[\|G(F(y))-y\|_1\right]
 \end{aligned}
 $$
-- 上述优化目标和Jensen–Shannon 散度形式相同，这意味着达到优化目标的最小值的条件是生成概率和原始数据概率相同，**理想情况下，原始 minimax GAN 等价于最小化真实分布和生成分布之间的 JS 散度**
+  - 第二部分的loss使得以下结论可以成立：**CycleGAN 是一种以目标图像域作为中间表示空间、并通过对抗学习约束中间表示分布的双向自编码结构**
+  - 第三部分：Full Objective
+    - 作者将两项对抗损失和循环一致性损失合并，使用循环一致性损失权重调节两部分loss的比例
+
+- 实际训练时，作者将原始 GAN 的对数对抗损失替换为 Least-Squares GAN（LSGAN）形式，以改善训练稳定性
+- 对于生成器 $G$，实际使用：
+
+$$
+\mathcal L_G^{\mathrm{adv}}=
+\mathbb E_{x\sim p_X}
+[(D_Y(G(x))-1)^2]
+$$
+- 对于判别器：
+
+$$
+\begin{aligned}
+\mathcal L_{D_Y}
+={}&
+\mathbb E_{y\sim p_Y}[(D_Y(y)-1)^2]\\
+&+ \mathbb E_{x\sim p_X}[D_Y(G(x))^2]
+\end{aligned}
+$$
+- 这里的核心变化是，将二元交叉熵形式换成平方误差形式，这样一来，即使生成样本已经被判别器识别为假样本，生成器仍能通过平方误差获得用于调整输出的梯度
+
+- 原文的Section5.2部分，作者为部分任务引入了额外的 Identity Mapping Loss：
+
+$$
+\begin{aligned}
+\mathcal L_{\mathrm{id}}(G,F)
+={}&
+\mathbb E_{y\sim p_Y}
+[\|G(y)-y\|_1]\\
+&+
+\mathbb E_{x\sim p_X}
+[\|F(x)-x\|_1]
+\end{aligned}
+$$
+- 含义是：如果输入已经属于目标域，就不应该进行没有必要的修改；Identity Loss 就提供了额外的归纳偏置，鼓励模型减少不必要的改变
 
 ## 实现细节：
-- 原论文第 3 页已经指出了一个很重要的实际问题：当生成器较差时，判别器很容易识别生成样本，这可能使原始生成器目标的梯度过弱
-- 为了解决这个问题，Goodfellow 在原论文中提出另一种生成器目标，不再最小化：
+- CycleGAN 使用基于 Johnson 等人图像转换网络的 ResNet Generator
+  - 这里可以和StyleGAN的实现做一个对比，CycleGAN 直接使用了适合保留输入空间结构的编码—残差处理—解码结构，原因是CycleGAN解决的是Image-to-Image Translation，本身输入的维度和原始的GAN就已经不同了
 
-$$
-\log(1-D(G(z)))
-$$
-- 而是最大化：
+- CycleGAN 没有使用仅输出一个整图真假分数的判别器，而是采用 PatchGAN。PatchGAN 为多个局部感受野区域输出真假判断，再聚合这些判断形成对抗损失
 
-$$
-\log D(G(z))
-$$
-- Non-saturating Loss 解决的是一类梯度饱和问题，并不保证 GAN 不会出现梯度消失(BCEloss实现的时候是最小化负的Non-saturating Loss)
-
-- GAN 用可学习的判别器作为分布差异的间接优化机制，在训练中，我们并不计算显式概率，而是直接使用两个分布的样本训练一个二分类器
-
-- 训练过程需要交替优化： $D$ 需要不断适应当前生成器所产生的假数据；而 $G$ 需要不断利用当前判别器反馈的信息来改善生成分布；如果只持续更新生成器而不更新判别器，生成器可能学到的是如何利用固定判别器的漏洞，而非真正匹配数据分布；如果判别器过强，生成器又可能接收不到有用的训练信号
-
-- 整体的交替学习过程可以由原文的图1表示：
-![https://github.com/wanna-bornb-disciplinant/Generative-Models-Atlas/blob/main/images/gan/1.png](https://github.com/wanna-bornb-disciplinant/Generative-Models-Atlas/blob/main/images/gan/1.png)
-
-- 整体上，可以用一个简单的pytorch代码展示GAN是如何训练的：
-```python
-import torch
-import torch.nn as nn
-
-latent_dim = 100
-image_dim = 28 * 28
-
-G = nn.Sequential(
-    nn.Linear(latent_dim, 256),
-    nn.ReLU(),
-    nn.Linear(256, 512),
-    nn.ReLU(),
-    nn.Linear(512, image_dim),
-    nn.Sigmoid()
-)
-
-D = nn.Sequential(
-    nn.Linear(image_dim, 512),
-    nn.LeakyReLU(0.2),
-    nn.Linear(512, 256),
-    nn.LeakyReLU(0.2),
-    nn.Linear(256, 1)
-)
-
-criterion = nn.BCEWithLogitsLoss()
-opt_G = torch.optim.Adam(G.parameters(), lr=2e-4)
-opt_D = torch.optim.Adam(D.parameters(), lr=2e-4)
-
-def train_step(real):
-    real = real.reshape(real.size(0), -1)
-    batch_size = real.size(0)
-    device = real.device
-    G.to(device)
-    D.to(device)
-
-    real_labels = torch.ones(batch_size, 1, device=device)
-    fake_labels = torch.zeros(batch_size, 1, device=device)
-
-    # 1. Train discriminator
-    z = torch.randn(batch_size, latent_dim, device=device)
-    fake = G(z).detach()
-
-    d_real = D(real)
-    d_fake = D(fake)
-
-    loss_D = (
-        criterion(d_real, real_labels)
-        + criterion(d_fake, fake_labels)
-    )
-
-    opt_D.zero_grad()
-    loss_D.backward()
-    opt_D.step()
-
-    # 2. Train generator (non-saturating)
-    z = torch.randn(batch_size, latent_dim, device=device)
-    fake = G(z)
-
-    loss_G = criterion(D(fake), real_labels)
-
-    opt_G.zero_grad()
-    loss_G.backward()
-    opt_G.step()
-
-    return loss_D.item(), loss_G.item()
-```
-
-- 作者在三个数据集上进行了实验：MNIST：手写数字；TFD：Toronto Face Database；CIFAR-10：自然图像
+- 文章进行了消融实验验证了几个loss的不可或缺性，最终说明：GAN + Two Cycles	通常获得更完整的跨域映射约束
+- 但关于这部分，更合理更严谨的说法是：完整的双向循环目标在整体实验中表现出更强的稳定性与适用性，但它并不是能够解决全部语义对应问题的理论保证。
 
 ## 站在现在的角度，回看这篇文章
-- JS散度本身具有局限性：JS 散度可以判断两个分布是否一致，但当两个分布的支撑集不重叠时，它可能无法提供关于如何移动生成分布的有效距离信息
-  - 对于确定性且足够光滑的生成器，它所诱导的分布可能集中在低维流形上；真实数据和生成数据各自所在的流形在训练初期可能不重叠；在这种情况下，基于最优判别器的 JS 散度目标可能饱和
+- 如果从生成模型发展的角度看，CycleGAN 的价值不主要在于它使用了 GAN，而在于它提供了这样一种思想：当我们无法获得样本级监督时，是否可以通过分布约束和结构一致性构造训练信号
 
-- 原文提到过这一问题：因为 GAN 的每一步训练并不是直接对 $p_g$ 做全局分布优化，而是利用有限样本上的判别器梯度改变模式，这会导致生成器可能发现某些输出特别容易欺骗当前判别器，于是越来越多不同的潜变量被映射到这些输出附近，这就是典型的模式崩塌（Mode Collapse）
-- 崩塌并不是由 JS 散度饱和单独导致的：它还与非凸非凹博弈、有限容量判别器、训练动力学等因素有关
+- 但CycleGAN的问题也很明显，即Cycle Loss 衡量的是信息能否被逆映射恢复，而不是信息是否以合理的语义形式存在
 
-- 简单的同步梯度下降—上升仍然可能出现向外螺旋发散，而不是收敛，这是GAN训练困难的一个很大障碍，交替优化是必然选择，但也是次优选择，至少从训练的层面来说是这样
+- GAN 可以不仅仅作为生成器，而是作为**分布约束工具**。只要我们能够从目标分布采样，就可以使用判别器提供学习信号。
+
+- 实际上，CycleGAN完成的任务和WGAN、DCGAN、StyleGAN都不相同，后面的几种侧重于研究GAN类生成模型的训练目标和稳定性、提升图像生成质量，同时一些工作还会将工作重点放在如何解耦和分级潜变量上，这也类似是图像反演（Image Inversion）领域的早期工作，但CycleGAN侧重于条件跨域映射
 
 ## 参考文章和博客，感谢他们的分析解读
-
-- [GAN论文逐段精读【论文精读】-李沐-Bilibili](https://www.bilibili.com/video/BV1rb4y187vD)
-
