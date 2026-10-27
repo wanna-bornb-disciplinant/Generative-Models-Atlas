@@ -1,11 +1,12 @@
 # VQ-GAN
 
 ## 发表情况
-- van den Oord, A., Vinyals, O., & Kavukcuoglu, K. (2017). Neural Discrete Representation Learning. Advances in Neural Information Processing Systems, 30
-  - NIPS 2017
-- 主要作者：Aaron van den Oord, Oriol Vinyals, Koray Kavukcuoglu
-- 截止2026.10 cite：10348+
-- 开创离散潜空间生成的主流分支；后续DALL.E1使用VQ-VAE，埋下大模型的种子
+- Esser, P., Rombach, R., & Ommer, B. (2021). Taming transformers for high-resolution image synthesis. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition (pp. 12873-12883).
+  - CVPR 2021 oral
+- 主要作者：Patrick Esser, Robin Rombach, Björn Ommer
+  - 海德堡大学
+- 截止2026.10 cite：5715+
+- 在 VQ-VAE 基础上，**增加 patch 判别器 + 感知损失**，解决高压缩率下重建模糊问题
 - [原文链接](https://proceedings.neurips.cc/paper_files/paper/2017/file/7a98af17e63a0ac09ce2e96d03992fbc-Paper.pdf)
 
 ## 摘要解读：
